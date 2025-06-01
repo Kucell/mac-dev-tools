@@ -28,6 +28,80 @@ confirm() {
     esac
 }
 
+# 安装 Git
+install_git() {
+    if command -v git &> /dev/null; then
+        print_message "Git 已安装"
+        return 0
+    fi
+
+    if confirm "是否安装 Git？"; then
+        print_message "安装 Git..."
+        if command -v brew &> /dev/null; then
+            brew install git
+        else
+            print_warning "请先安装 Homebrew，然后重新运行此脚本"
+            exit 1
+        fi
+    fi
+
+    # 配置 Git 用户信息（可选）
+    if ! git config --global user.name &> /dev/null; then
+        echo "请输入 Git 全局用户名："
+        read git_user
+        git config --global user.name "$git_user"
+    fi
+
+    if ! git config --global user.email &> /dev/null; then
+        echo "请输入 Git 全局邮箱："
+        read git_email
+        git config --global user.email "$git_email"
+    fi
+
+    # 设置默认分支名称为 main
+    git config --global init.defaultBranch main
+
+    print_message "Git 安装并配置完成"
+}
+
+# 安装 Homebrew
+install_homebrew() {
+    if command -v brew &> /dev/null; then
+        print_message "Homebrew 已安装"
+        return 0
+    fi
+
+    if confirm "未检测到 Homebrew，是否安装？"; then
+        print_message "安装 Homebrew..."
+        
+        # 预先检测官方源是否可访问
+        print_message "正在检查官方源是否可访问..."
+        if curl -fsS --head https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh >/dev/null 2>&1; then
+            print_message "官方源可访问，正在使用官方源安装 Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        else
+            print_warning "官方源不可访问，正在使用清华大学镜像..."
+            /bin/bash -c "$(curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/install.git)"
+        fi
+        
+        # 自动判断芯片架构
+        if [[ $(uname -m) == 'arm64' ]]; then
+            HOMEBREW_PREFIX="/opt/homebrew"
+        else
+            HOMEBREW_PREFIX="/usr/local"
+        fi
+        
+        # 将 Homebrew 加入 PATH
+        echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >> ~/.zshrc
+        eval "$(${HOMEBREW_PREFIX}/bin/brew shellenv)"
+        
+        print_message "Homebrew 安装完成"
+    else
+        print_warning "Homebrew 未安装，部分功能将无法使用"
+        exit 1
+    fi
+}
+
 # 检查并安装 zsh
 setup_zsh() {
     if [ "$SHELL" != "/bin/zsh" ]; then
@@ -344,19 +418,68 @@ install_frontend_tools() {
     fi
 }
 
+# 安装 tmux
+install_tmux() {
+    if command -v tmux &> /dev/null; then
+        print_message "tmux 已安装"
+        return 0
+    fi
+
+    if confirm "是否安装 tmux？"; then
+        print_message "安装 tmux..."
+        if command -v brew &> /dev/null; then
+            brew install tmux
+        else
+            print_warning "请先安装 Homebrew"
+            exit 1
+        fi
+    fi
+
+    # 可选：创建 .tmux.conf 配置文件
+    if [ ! -f "$HOME/.tmux.conf" ]; then
+        print_message "创建默认 .tmux.conf 配置文件..."
+        cat > "$HOME/.tmux.conf" << EOL
+# 基础配置
+set-option -g prefix C-a
+unbind C-b
+bind-key C-a send-prefix
+
+# 窗口编号从 1 开始
+set-option -g base-index 1
+
+# 窗格编号从 0 开始
+set-option -g pane-base-index 0
+
+# 启用鼠标支持（tmux 2.1+）
+set-option -g mouse on
+EOL
+    fi
+
+    print_message "tmux 安装并配置完成"
+}
+
 # 主函数
 main() {
     print_message "开始设置开发环境..."
-    
-    # 基础环境设置
+
+    # 安装 Homebrew
+    install_homebrew
+
+    # 安装 Git
+    install_git
+
+    # 安装 ZSH 并配置
     setup_zsh
     setup_directories
-    
+
+    # 安装 tmux
+    install_tmux
+
     # 前端开发环境
     if confirm "是否配置前端开发环境？"; then
-        setup_frontend_env
+        install_frontend_tools
     fi
-    
+
     print_message "配置完成！请运行 'source ~/.zshrc' 使配置生效。"
 }
 
